@@ -4,7 +4,7 @@ Project | Score | Notes
 ------- | ----- | -----
 lab0 | 98 | 
 lab1a | 100 |
-lab1b | 75 | mixed up variables in socket code, fixed
+lab1b | 75 | mixed up variables in socket code, refer to 4c socket code for correct one
 lab2a | 92 | late penalty -8 => correctness: 100
 lab2b | 82 | late penalty -16 => correctness: 98
 lab3a | 93 |
