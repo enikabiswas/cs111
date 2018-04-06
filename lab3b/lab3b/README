@@ -1,0 +1,23 @@
+NAME: Kubilay Agi
+EMAIL: kubilayagi@g.ucla.edu
+ID: 304784519
+
+Files included:
+README - the file you are reading right now
+Makefile - contains targets for default, dist, and clean
+lab3b.py - implementation of this project in python
+
+Because I did not know python when I started this project, I
+used tutorialspoint.com for many things when looking up syntax
+
+I also used stackoverflow.com for several syntax and more specific/obscure
+python questions.
+
+I also used the manual on the ext2 file system that we were given for the
+last project as a reference for the block offsets and the numbers
+of the valid nodes.
+
+The biggest problem I had with this project was that some of the values
+needed to be casted to int before they would be usable for me since I was
+using ints to cross reference against my data structures. It took me a
+while to figure this out, but once I did, things started to work

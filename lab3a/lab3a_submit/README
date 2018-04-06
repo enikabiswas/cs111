@@ -1,0 +1,27 @@
+NAME: Kubilay Agi
+EMAIL: kubilayagi@g.ucla.edu
+ID: 304784519
+
+Included files:
+lab3a.c - source code for the solution
+
+README - this file
+
+Makefile - file with the appropriate targets
+
+
+Research:
+
+I relied heavily on tutorialspoint.com for references about various c functions
+
+I also based some of my functions off of functions that I found at:
+
+https://www.epochconverter.com/programming/c
+
+and
+
+http://cs.smith.edu/~nhowe/262/oldlabs/ext2.html
+
+
+Additionally, I used the included manual on the EXT2 file system
+for information about the offsets and other info

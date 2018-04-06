@@ -1,0 +1,22 @@
+NAME: Kubilay Agi
+EMAIL: kubilayagi@g.ucla.edu
+ID: 304784519
+
+The primary resource that I used for this project were the man pages for the C language
+(via man7.org) as well as stack overflow pages for syntax questions. I also used the
+zlib reference manual to set up my inflation and deflation functions.
+
+I also altered my design from lab1a because I was writing one character at a time across
+the pipes and sockets. I changed this to writing the whole buffer at once, but traversing
+through the buffer before doing so so that I could recognize when the special characters
+were sent across.
+
+The following are links to resources that I used to help me in this project:
+
+compression:
+https://stackoverflow.com/questions/7540259/deflate-and-inflate-zlib-h-in-c
+
+
+socket programming:
+http://www.cs.rpi.edu/~moorthy/Courses/os98/Pgms/socket.html
+https://www.tutorialspoint.com/unix_sockets/index.htm

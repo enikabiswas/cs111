@@ -1,0 +1,11 @@
+#-*- Makefile -*-
+.SILENT:
+
+default: lab3a.c
+	gcc -Wall -Wextra -o lab3a lab3a.c
+
+dist: lab3a.c README
+	tar -czf lab3a-304784519.tar.gz lab3a.c README Makefile
+
+clean:
+	rm -f lab3a-304784519.tar.gz lab3a

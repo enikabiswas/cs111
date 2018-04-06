@@ -1,0 +1,21 @@
+NAME: Kubilay Agi
+EMAIL: kubilayagi@g.ucla.edu
+ID: 304784519
+
+Beaglebone:
+
+Serial Number: BBGW17080088
+
+MAC Address: 2CF7F1066958
+
+The files that are included for lab 4a are listed below. Each of them
+has a description of what they are next to them:
+
+README - the file you are currently reading
+build_run.png - compilation and execution of the trivial program that was copied over via FileZilla
+connected.png - image of the ip address and mac address after connecting the board to wifi
+copy.png - image of using FileZilla to copy over a file from the local machine onto the board
+git.png - image of using 'apt-get install' to install git onto the board and using 'git clone' to copy a repository to the board
+my_beaglebone.jpg - a cute selfie of me with my beloved beaglebone
+
+

@@ -1,0 +1,93 @@
+NAME: Kubilay Agi
+EMAIL: kubilayagi@g.ucla.edu
+ID: 304784519
+
+QUESTIONS AND ANSWERS:
+
+2.3.1)
+It is not entirely clear where most of the cylces are spent. For 1 thread,
+most of the cycles go to operations. For 2 threads, if the program is using
+spinlocks, about 50% of the cycles go to the locking and at least 50% go
+to the operations. With mutex, most of the cycles go to the operation because
+mutex is more efficient than spinlocks because cycles are not burned while
+spinning. 
+
+These are the most expensive parts of the code because this is a critical
+section, and with locking, this section becomes a bottleneck for the program.
+It is also expensive because we have to do inserts and deletes into a list
+which also takes up time.
+
+The most expensive parts of the code with a high number of threads goes to 
+locking with spinlocks, but goes to operations with mutexes. This is because
+there are several threads burning cycles with spinlocks, and there are more
+cycles wasted with mutexes, but not nearly as many as with spinlocks.
+
+2.3.2)
+From looking at the profile.out file, we see this:
+     .      .  258:                     clock_gettime(CLOCK_MONOTONIC, &start);
+   511    511  259:                     while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260:                     clock_gettime(CLOCK_MONOTONIC, &end);
+
+From this, we can see that the while loop that implements the spinlock is the
+line that takes up the most number of cycles. The total number given to us is 
+around 1020, so we see that about half of the time spent running the program
+is spent burning cycles in the spinlock loop.
+
+This is because with high numbers of threads, each thread is using its time
+slice up with the spinning instead of checking for the lock and giving up the
+CPU if the lock is unavailable. This means that the program has times where
+nothing is running and threads are just spinning while waiting for the lock.
+If we have more threads than we do cores, it is possible that during a certain
+time period, literally no work is being done toward the completion of the program.
+
+
+2.3.3)
+When there are more threads competing for the lock, the possibility of one thread
+getting the lock over the others decreases. This means that if the thread
+cannot get the lock, it may have to wait for 11 more threads to complete their
+execution before it can get the lock instead of having to wait for only 1 other
+thread (for example).
+
+The completion time per operation rises less dramatically because there is still
+some extra time spent waiting for the additional threads to finish their work. Also,
+the list gets longer when there are more threads which means that the threads take
+longer to find the correct place for the node that they want to insert (because the
+lists are sorted) because the list size increases. When the number of threads goes
+up, the longer each thread has to wait. But there are always operations being done
+by a thread so the time per operation increases less steeply.
+
+2.3.4)
+The change in performance with multiple lists is because the lists are of smaller
+size, so the search for the right place for each item is not as long as with a 
+singular, very long list. 
+
+If you have more lists than iterms to insert, then your
+throughput will stop increasing, assuming you have a perfectly random hash function
+so that no two nodes are put in the same list. This is because the probability that
+two threads will contest for locks is near zero.
+
+It is not reasonable for the throuput of an N-way partitioned list hsould be the
+same as the throughput of the lsit with fewer threads because partitioning makes
+the critical sections faster and decreases time for inserts. Since contention
+is decreased, these two throughputs cannot be the same.
+
+RESOURCES USED:
+
+The main resources that I used for this project were man7.org for the manual
+pages of the functions that we needed to use. Additionally, there are several
+small syntactical questions that I answered with stack overflow and other 
+random sites. Most of the help simply came from using my previous lab as a basis
+and modifying the code to fit the new lab.
+
+I had some trouble making the program for lab2_list.gp because I had not worked
+with these files before. Some of the issues I ran into were about when to use
+each value from the CSV (ie $2 and $7) because I was not sure how to access these
+until I read the description of what the program was going to plot and what values
+were being used. That is when I realized that each $# correspoonds to a particular
+column of the comma separated value. 
+
+Additionally, when I forgot single commas from my grep statements, the program
+would find the programs that ran on 1 thread as well as 12 threads because I 
+did not specify that for some plots, I only wanted to have the data for the
+programs that ran on 1 thread only. Before I fixed this issue, the graphs were
+coming out with two different trendlines, which is not the desired result.

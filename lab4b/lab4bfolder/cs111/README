@@ -1,0 +1,24 @@
+NAME: Kubilay Agi
+EMAIL: kubilayagi@g.ucla.edu
+ID: 304784519
+
+Files included:
+lab4b.c is my implementation for lab 4b.
+
+Research:
+Most of the the information that I gathered for this project
+came from tutorialspoint.com and stack overflow. The things
+that I researched were predominantely syntax questions for c.
+The other resources that I used were the provided guides on
+how to use the gpio and aio mraa libraries in order to interact
+with and get data from the beaglebone.
+
+The issues that I had with this project were figuring out how
+to handle the input from stdin and figuring out the mappings
+of the different pins on the beaglebone. For the input, I 
+ended up using two buffers, one for reading in the entire available
+input after polling and the other for individual commands. If an
+incomplete command comes in, the buffer for the commands retains 
+what it had at the end of the last poll and is appended to in the
+new cycle so that we can get the whole command before executing 
+anything.

@@ -1,0 +1,10 @@
+# -*- Makefile -*-
+
+.SILENT:
+
+default:
+	gcc -Wall -Wextra server.c client.c -o lab1b
+clean:
+	rm -f lab1b-304784519.tar.gz lab1b
+dist:
+	tar -czf lab1b-304784519.tar.gz server.c client.c

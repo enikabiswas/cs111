@@ -1,0 +1,9 @@
+#include <stdio.h>
+#include <unistd.h>
+
+int main(int argc, char **argv) {
+	
+	int ret = execl("/bin/bash", "bash", NULL);	
+	printf("fuck mane");
+	return 0;
+}

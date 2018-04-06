@@ -1,0 +1,2736 @@
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   585    741 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   361    361  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     90  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   224    224  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     66  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   585    741 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   361    361  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     90  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   224    224  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     66  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   579    726 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   373    373  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     81  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      1  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   205    205  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     1      1  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     64  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      1  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   579    726 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   373    373  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     81  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      1  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   205    205  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     1      1  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     64  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      1  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   835    980 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   513    513  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     62  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   322    322  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     83  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   835    980 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   513    513  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     62  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   322    322  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     83  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   992   1154 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   458    458  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     77  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     1      1  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   533    533  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     85  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   992   1154 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   458    458  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     77  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     1      1  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   533    533  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     85  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   577    765 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   330    330  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     89  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   247    247  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     99  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   577    765 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   330    330  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     89  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   247    247  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     99  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   411    555 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   269    269  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     78  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   142    142  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     66  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   411    555 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   269    269  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     78  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   142    142  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     66  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+  1052   1226 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   508    508  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     80  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   544    544  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     94  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+  1052   1226 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   508    508  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     80  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   544    544  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     94  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   694    872 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   389    389  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     86  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   305    305  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     92  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;
+ROUTINE ====================== do_work in /u/cs/ugrad/kubilay/cs111/lab2b/lab2_list.c
+   694    872 Total samples (flat / cumulative)
+     .      .  218: 	}
+     .      .  219: 	return;
+     .      .  220: }
+     .      .  221: 
+     .      .  222: 
+---
+     .      .  223: void *do_work(void* arg) {
+     .      .  224: 	signal(SIGSEGV, sighandler);
+     .      .  225: 	
+     .      .  226: 	int tnum = *((int*) arg);
+     .      .  227: 	
+     .      .  228: 	int *spinlock;
+     .      .  229: 	pthread_mutex_t *lock;
+     .      .  230: 	
+     .      .  231: 	//each thread should only do their share of operations and no more
+     .      .  232: 	int startpos = tnum * num_iters;
+     .      .  233: 	int endpos = (tnum + 1) * num_iters;
+     .      .  234: 
+     .      .  235: 	struct timespec start, end;
+     .      .  236: 	
+     .      .  237: 	//sublist_t *sublist;
+     .      .  238: 	SortedList_t* list_ptr;
+     .      .  239: 	int i;
+     .      .  240: 	//inserts
+     .      .  241: 	for (i = startpos; i < endpos; i++) {
+     .      .  242: 		const char* key_lookup = elem_arr[i].key;
+     .      .  243: 		int list_index = hash_func(key_lookup);
+     .      .  244: 		//sublist = &multi_list[list_index];
+     .      .  245: 		//printf("%d", list_index);
+     .      .  246: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  247: 		if (m_flag) {
+     .      .  248: 			lock = &(&multi_list[list_index])->lock;
+     .      .  249: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  250: 			pthread_mutex_lock(lock);
+     .      .  251: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  252: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  253: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  254: 			pthread_mutex_unlock(lock);
+     .      .  255: 		}
+     .      .  256: 		else if (s_flag) {
+     .      .  257: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  258: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   389    389  259: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  260: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  261: 			waiting[tnum] += calculate_time(&start, &end);
+     .     86  262: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  263: 			__sync_lock_release(spinlock);
+     .      .  264: 		}
+     .      .  265: 		else {
+     .      .  266: 			SortedList_insert(list_ptr, &elem_arr[i]);
+     .      .  267: 		}
+     .      .  268: 	}
+     .      .  269: 
+     .      .  270: 	/*
+     .      .  271: 	need to get the locks of all the lists so that the lengths don't change while we are getting the lengths of the lists
+     .      .  272: 	
+     .      .  273: 	was originally trying to only lock one list length, but the others' lengths changed as I was getting the current
+     .      .  274: 	list's length 
+     .      .  275: 	*/
+     .      .  276: 	if (m_flag) {
+     .      .  277: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  278: 		for (i = 0; i < num_lists; i++) {
+     .      .  279: 			pthread_mutex_lock(&(multi_list[i].lock));
+     .      .  280: 		}
+     .      .  281: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  282: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  283: 		for (i = 0; i < num_lists; i++) {
+     .      .  284: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  285: 				fprintf(stderr, "error finding length in m_flag block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  286: 				exit(2);
+     .      .  287: 			}
+     .      .  288: 		}
+     .      .  289: 		for (i = 0; i < num_lists; i++) {
+     .      .  290: 			pthread_mutex_unlock(&(multi_list[i].lock));
+     .      .  291: 		}
+     .      .  292: 	}
+     .      .  293: 	else if (s_flag) {
+     .      .  294: 		clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  295: 		for (i = 0; i < num_lists; i++) {
+     .      .  296: 			while(__sync_lock_test_and_set(&(multi_list[i].spinlock), 1));
+     .      .  297: 		}
+     .      .  298: 		clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  299: 		waiting[tnum] += calculate_time(&start, &end);
+     .      .  300: 		for (i = 0; i < num_lists; i++) {
+     .      .  301: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  302: 				fprintf(stderr, "error finding length in s_flag block\nThread number: %d\nList number: %d", tnum, i);
+     .      .  303: 				exit(2);
+     .      .  304: 			}
+     .      .  305: 		}
+     .      .  306: 		for (i = 0; i < num_lists; i++) {
+     .      .  307: 			__sync_lock_release(&(multi_list[i].spinlock));
+     .      .  308: 		}
+     .      .  309: 	}
+     .      .  310: 	else {
+     .      .  311: 		for (i = 0; i < num_lists; i++) {
+     .      .  312: 			if (SortedList_length(&(multi_list[i].list)) == -1) {
+     .      .  313: 				fprintf(stderr, "error finding length in unprotected block\n\nThread number: %d\nList number: %d", tnum, i);
+     .      .  314: 				exit(2);
+     .      .  315: 			}
+     .      .  316: 		}
+     .      .  317: 	}
+     .      .  318: 	
+     .      .  319: 	//deletes
+     .      .  320: 	for (i = startpos; i < endpos; i++) {
+     .      .  321: 		const char* key_lookup = elem_arr[i].key;
+     .      .  322: 		int list_index = hash_func(key_lookup);
+     .      .  323: 		//sublist = &multi_list[list_index];
+     .      .  324: 		list_ptr = &(&multi_list[list_index])->list;
+     .      .  325: 		if (m_flag) {
+     .      .  326: 			lock = &(&multi_list[list_index])->lock;
+     .      .  327: 			clock_gettime(CLOCK_MONOTONIC, &start);
+     .      .  328: 			pthread_mutex_lock(lock);
+     .      .  329: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  330: 			waiting[tnum] += calculate_time(&start, &end);
+     .      .  331: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  332: 			if (found == NULL) {
+     .      .  333: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  334: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  335: 				exit(2);
+     .      .  336: 			}
+     .      .  337: 			if (SortedList_delete(found) != 0) {
+     .      .  338: 				fprintf(stderr, "error deleting in m_flag block\n");
+     .      .  339: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  340: 				exit(2);
+     .      .  341: 			}
+     .      .  342: 			pthread_mutex_unlock(lock);
+     .      .  343: 		}
+     .      .  344: 		else if (s_flag) {
+     .      .  345: 			spinlock = &(&multi_list[list_index])->spinlock;
+     .      .  346: 			clock_gettime(CLOCK_MONOTONIC, &start);
+   305    305  347: 			while(__sync_lock_test_and_set(spinlock, 1));
+     .      .  348: 			clock_gettime(CLOCK_MONOTONIC, &end);
+     .      .  349: 			waiting[tnum] += calculate_time(&start, &end);
+     .     92  350: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  351: 			if (found == NULL) {
+     .      .  352: 				fprintf(stderr, "error doing lookup in m_flag block\n");
+     .      .  353: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  354: 				exit(2);
+     .      .  355: 			}
+     .      .  356: 			if (SortedList_delete(found) != 0) {
+     .      .  357: 				fprintf(stderr, "error deleting in s_flag block\n");
+     .      .  358: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  359: 				exit(2);
+     .      .  360: 			}
+     .      .  361: 			__sync_lock_release(spinlock);
+     .      .  362: 		}
+     .      .  363: 		else {
+     .      .  364: 			SortedListElement_t *found = SortedList_lookup(list_ptr, key_lookup);
+     .      .  365: 			if (found == NULL) {
+     .      .  366: 				fprintf(stderr, "error doing lookup in unprotected block\n");
+     .      .  367: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  368: 				exit(2);
+     .      .  369: 			}
+     .      .  370: 			if (SortedList_delete(found) != 0) {
+     .      .  371: 				fprintf(stderr, "error deleting in unprotected block\n");
+     .      .  372: 				fprintf(stderr, "Thread number: %d\n", tnum);
+     .      .  373: 				exit(2);
+     .      .  374: 			}
+     .      .  375: 		}
+     .      .  376: 	}
+     .      .  377: 
+     .      .  378: 	return NULL;
+     .      .  379: }
+---
+     .      .  380: 
+     .      .  381: int main(int argc, char *argv[]) {
+     .      .  382: 	getOptions(argc, argv);
+     .      .  383: 
+     .      .  384: 	num_operations = num_iters * num_threads;

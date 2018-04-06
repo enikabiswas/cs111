@@ -1,0 +1,23 @@
+NAME: Kubilay Agi
+EMAIL: kubilayagi@g.ucla.edu
+ID: 304784519
+
+Files included:
+README - this file
+lab4c.c - implementation of lab4c
+Makefile - makefile with all required targets for this lab
+
+Research:
+Most of my time was spent debugging the socket part of my program,
+so I used man7.org to answer my questions about this.
+
+Also I had some trouble with connecting to the wifi with my beaglebone,
+but eventually was able to fix it.
+
+The other thing I had trouble with was sometimes I wouldn't write
+my id to the socket before starting to do the processing, which would
+cause the program to crash and I had no idea why because the error messages
+I would get would not indicate this. However, I eventually figured out that
+this was the case after checking the website for the server where it says
+the status of each id's tests and mine would come up as not having reported
+the id. After fixing this problem, my code ran fine.

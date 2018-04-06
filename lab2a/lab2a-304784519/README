@@ -1,0 +1,112 @@
+NAME: Kubilay Agi
+EMAIL: kubilayagi@g.ucla.edu
+ID: 304784519
+
+Questions:
+
+Part 1: ADD
+
+2.1.1)
+Q: Why does it take many iterations before errors are seen?
+Why does a significantly smaller number of iterations so seldom fail?
+
+A: It takes many iterations before errors are seen because of the amount of time that is
+required to build the threads themselves in the for-loop within the main routine.
+After one thread is created and told to run, the next one's creation starts. However,
+by the time the second one is created and starts to run the function that it is assigned,
+the previous thread has already finished its computations. This is because iterations
+around 100 - 10000 take less time than creating new threads and having them start to
+do their computations.
+
+2.1.2)
+Q: Why are the --yield runs so much slower?
+Where is the additional time going?
+Is it possible to get valid per-operation timings if we are using the --yield option?
+If so, explain how. If not explain why not.
+
+A: The yield runs are slower because yield is a syscall and therefore requires
+time to make a context switch.
+The extra time that we are losing is going to these context switches, as they
+take up several cpu cycles and do not allow us to do computations during the 
+time that they are running.
+It is not possible to get the correct per operation times because the yields
+continue to happen even past the initial set up. The creation of threads adds
+time initially but is amortized as the computations continue. This is not the
+case with the yield calls because they keep happening as execution continues.
+
+
+2.1.3)
+Q: Why does the average cost per operation drop with increasing iterations?
+If the cost per iteration is a function of the number of iterations,
+how do we know how many iterations to run (or what the correct cost is)?
+
+A: The cost per operation drops because the cost is accounts for the time it
+takes to create the threads at the beginning of the program execution. If we
+have large amounts of iterations, this cost is spread out over possibly
+several thousand iterations and is therefore amortized. To find the correct
+cost, we need to run more than 10000 iterations because that is the point on
+the plots where the graph begins to flatten out. As soon as the graph of the
+cost per operation becomes flat, that is the correct cost per operation.
+
+2.1.4)
+Q: Why do all of the options perform similarly for low numbers of threads
+Why do the three protected operations slow down as the number of threads rises?
+
+A: All of the options perform similarly for low numbers of threads because
+there are fewer conflicts between the threads, and therefore less time spent
+making context switches between the threads. As the number of threads rises,
+there are more threads who are trapped waiting and therefore the cost of 
+switching between these threads to see which one is able to run costs us 
+time. Also, as the number of threads increases, the number of total operations
+increases which leads to prolonged competition between threads for the lock.
+
+Part 2: LIST
+
+2.2.1)
+Q: Compare the variation in time per mutex protected operation vs the number
+of threads in Part 1 and Part 2
+Comment on the general shapes of the curves and explain why they have this shape
+Comment on the relative rates of increase and differences in the shapes of the curves and offer an explanation for these differences
+
+A: The difference between the two is that the cost per operation in part
+2 is much larger and grows much faster as the number of threads increases.
+This is because the operations done in part 2 are more complex (looking for
+the correct place for the node and then inserting it into the list). The 
+graph in part 1 appears to level out, and this is likeley because the
+time spent waiting because of locks does not matter after a certain number
+of threads. The graph for part 2 increases much quicker because as there
+are more nodes inserted into the list, the time required to find the right
+place for the next node increases.
+
+2.2.2)
+Q: Compare the variation in time per protected operation vs the number of threads for list operations protected by mutex vs spin locks.
+Comment on general shapes of the curves and the relative rates of increase, 
+and differences in the shapes of the curves. Offer an explanation for these
+differences.
+
+A: The shape of the curves is similar because the cost per operation increases
+for both of them as the number of threads goes up. This makes sense because
+there are more threads competing for the lock, and therefore each thread must
+wait longer than if there were few threads competing for the lock.
+
+The difference in the graphs is that the cost for the spin lock protected 
+operations is much higher and grows much faster than that for the mutex
+protected operations. This is because mutexes allow the thread with the
+lock to run as soon as it is realized that the lock is still held. On the
+other hand, spin locks spin and wiat for a time slice to be used up or run
+until the operating system preempts them. This takes up extra clock cycles
+that could be used doing the computation, but instead is wasted spinning in
+a while loop for the lock to be given up.
+
+------------------------------------
+
+Information and Sources:
+
+Information about how to implement the clocks:
+https://www.cs.rutgers.edu/~pxk/416/notes/c-tutorials/gettime.html
+
+I also relied on man7.org for information about the pthread library and
+also the other functions that were used for this project.
+
+Several smaller questions pertaining to syntax were answered via
+StackOverflow.com

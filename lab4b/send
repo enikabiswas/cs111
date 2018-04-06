@@ -1,0 +1,4 @@
+#!/bin/bash
+
+scp lab4b.c root@192.168.7.2:~/cs111/lab4b.c
+scp Makefile root@192.168.7.2:~/cs111/Makefile

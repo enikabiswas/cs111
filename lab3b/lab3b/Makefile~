@@ -1,0 +1,115 @@
+# -*- Makefile -*-
+.SILENT:
+
+WEBSITE=http://web.cs.ucla.edu/classes/cs111/Samples/
+FILE=P3B-test
+
+default:
+	rm -f lab3b
+	ln lab3b.py lab3b
+	chmod 777 lab3b
+
+.PHONY: all
+all:
+	for i in $(shell seq 1 22); do curl -O $(WEBSITE)$(FILE)_$${i}.csv; done
+	for i in $(shell seq 1 22); do curl -O $(WEBSITE)$(FILE)_$${i}.err; done
+	mkdir -p tests/csv
+	mkdir -p tests/err
+	mv *.csv tests/csv
+	mv *.err tests/err
+
+counter=1
+qweqwe:
+	while [ $counter -le 22 ]
+	do cat P3B-test_$counter.err >> diff.txt
+		sort P3B-test_$counter.csv -o P3B-test_$counter.csv
+		diff P3B-test_$counter.csv trivial.csv >> diff.txt;
+		((counter++))
+		printf "\n" >> diff.txt
+	done
+
+what:
+#python lab3b trivial.csv >> test.out
+	counter=1
+	while [ counter -le 22 ]
+	do
+		./lab3b tests/csv/P3B-test_$counter.csv >> file.err
+		diff file.err tests/err/P3B-test_$counter.err
+		echo "passed test $counter"
+		((counter++))
+	done
+
+test: lab3b
+	./lab3b tests/csv/P3B-test_1.csv > file.err
+	diff file.err tests/err/P3B-test_1.err
+	echo "passed test 1"
+	./lab3b tests/csv/P3B-test_2.csv > file.err
+	diff file.err tests/err/P3B-test_2.err
+	echo "passed test 2"
+	./lab3b tests/csv/P3B-test_3.csv > file.err
+	diff file.err tests/err/P3B-test_3.err
+	echo "passed test 3"
+	./lab3b tests/csv/P3B-test_4.csv > file.err
+	diff file.err tests/err/P3B-test_4.err
+	echo "passed test 4"
+	./lab3b tests/csv/P3B-test_5.csv > file.err
+	diff file.err tests/err/P3B-test_5.err
+	echo "passed test 5"
+	./lab3b tests/csv/P3B-test_6.csv > file.err
+	diff file.err tests/err/P3B-test_6.err
+	echo "passed test 6"
+	./lab3b tests/csv/P3B-test_7.csv > file.err
+	diff file.err tests/err/P3B-test_7.err
+	echo "passed test 7"
+	./lab3b tests/csv/P3B-test_8.csv > file.err
+	diff file.err tests/err/P3B-test_8.err
+	echo "passed test 8"
+	./lab3b tests/csv/P3B-test_9.csv > file.err
+	diff file.err tests/err/P3B-test_9.err
+	echo "passed test 9"
+	./lab3b tests/csv/P3B-test_10.csv > file.err
+	diff file.err tests/err/P3B-test_10.err
+	echo "passed test 10"
+	./lab3b tests/csv/P3B-test_11.csv > file.err
+	diff file.err tests/err/P3B-test_11.err
+	echo "passed test 11"
+	./lab3b tests/csv/P3B-test_12.csv > file.err
+	diff file.err tests/err/P3B-test_12.err
+	echo "passed test 12"
+	./lab3b tests/csv/P3B-test_13.csv > file.err
+	diff file.err tests/err/P3B-test_13.err
+	echo "passed test 13"
+	./lab3b tests/csv/P3B-test_14.csv > file.err
+	diff file.err tests/err/P3B-test_14.err
+	echo "passed test 14"
+	./lab3b tests/csv/P3B-test_15.csv > file.err
+	diff file.err tests/err/P3B-test_15.err
+	echo "passed test 15"
+	./lab3b tests/csv/P3B-test_16.csv > file.err
+	diff file.err tests/err/P3B-test_16.err
+	echo "passed test 16"
+	./lab3b tests/csv/P3B-test_17.csv > file.err
+	diff file.err tests/err/P3B-test_17.err
+	echo "passed test 17"
+	./lab3b tests/csv/P3B-test_18.csv > file.err
+	diff file.err tests/err/P3B-test_18.err
+	echo "passed test 18"
+	./lab3b tests/csv/P3B-test_19.csv > file.err
+	diff file.err tests/err/P3B-test_19.err
+	echo "passed test 19"
+	./lab3b tests/csv/P3B-test_20.csv > file.err
+	diff file.err tests/err/P3B-test_20.err
+	echo "passed test 20"
+	./lab3b tests/csv/P3B-test_21.csv > file.err
+	diff file.err tests/err/P3B-test_21.err
+	echo "passed test 21"
+	./lab3b tests/csv/P3B-test_22.csv > file.err
+	diff file.err tests/err/P3B-test_22.err
+	echo "passed test 22"
+	echo "passed all tests!"
+
+dist:
+	tar -czf lab3b-304784519.tar.gz lab3b.py Makefile README
+
+clean:
+	rm -f lab3b lab3b-304784519.tar.gz
