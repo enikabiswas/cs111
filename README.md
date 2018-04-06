@@ -1,5 +1,9 @@
 # cs111
 
+Midterm Grade: 93/100
+Final Exam Grade: 141/150
+Final Class Grade: A
+
 Project | Score | Notes
 ------- | ----- | -----
 lab0 | 98 | 
