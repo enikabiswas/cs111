@@ -1,7 +1,0 @@
-... testing compressed shell session
-    RC=0 ... FAIL (RC=254)
-ERROR: shell did not properly execute commands
-   compressed SENT commands ... PASS
-   compressed shell output ... PASS
-   shell properly receives commands ... FAIL
-!!! ORPHAN lab1b-server after compressed shell session
