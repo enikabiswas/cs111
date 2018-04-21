@@ -2,10 +2,6 @@
 
 #### Disclaimer: copying code for projects will be at your own risk.
 
-#### Midterm Grade: 93/100
-#### Final Exam Grade: 141/150
-#### Final Class Grade: A
-
 Project | Score | Notes
 ------- | ----- | -----
 lab0 | 98 | 
