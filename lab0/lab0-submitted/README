@@ -1,0 +1,64 @@
+NAME: Kubilay Agi
+EMAIL: kubilayagi@g.ucla.edu
+ID: 304784519
+
+Included Files:
+	 Included with this README file are the two screenshots for the
+	 backtrace and the breakpoint tests that I ran in gdb. Also, there
+	 is the Makefile for the project containing the targets:
+	 lab0 (default), check, dist, and clean. Under the check target,
+	 there are several tests that I ran to make sure that my program
+	 worked properly.
+
+	 There were 9 tests that I ran for the program.
+
+	 The first half of the tests check the programs behavior when
+	 the exit code should be 0 (i.e. a successful execution). To test
+	 this, I used several different combinations of the --input and
+	 --output flags that the program should be able to handle and
+	 execute successfully.
+
+	 After these, I checked for the various error codes (1 - 4) that
+	 we were supposed to include in our program.
+
+	 For exit(1), I used the --input option with a file that did not
+	 exist in the current directory (unrecognized argument)
+
+	 For exit(2), I used the --input option with a file that had reading
+	 permissions removed, so the file should not be able to be accessed
+	 and the program should exit with code 2.
+
+	 For exit(3), I used the --output option with a file that had
+	 writing permissions removed, so that the program should be unable
+	 ot open the output file
+
+	 For exit(4), I used the options --segfault --catch together to
+	 make sure that when the segmentation fault was registered because
+	 of the null pointer dereference, the signal handler caught the
+	 signal and exited with the correct code.
+
+References:
+
+	I used StackOverflow for small syntactic questions when I was
+	unsure of the proper formatting.
+
+	For the most part, I used the resources at gnu.org, 
+	tutorialspoint.com, and man7.org as references for the various 
+	topics that were covered while making this project. The main 
+	links that I used were:
+
+	https://www.gnu.org/software/libc/manual/html_node/Getopt-Long-Options.html
+
+	https://www.tutorialspoint.com/cprogramming/c_error_handling.htm
+
+	http://mrbook.org/blog/tutorials/make/
+
+	http://codewiki.wikidot.com/c:system-calls:open
+
+	http://codewiki.wikidot.com/c:system-calls:read
+
+	http://codewiki.wikidot.com/c:system-calls:close
+
+	http://codewiki.wikidot.com/c:system-calls:write
+
+	https://www.youtube.com/watch?v=GExnnTaBELk

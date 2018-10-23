@@ -1,0 +1,18 @@
+NAME: Kubilay Agi
+EMAIL: kubilayagi@g.ucla.edu
+ID: 304784519
+
+For this project, I heavily leveraged the manual pages for each of the functions that
+we needed to use for this project. 
+
+man7.org and gnu.org were the most helpful for this project
+
+The code has been somewhat refactored, but the main function is still a bit messy. 
+
+I originally had everything in the main function, but not being able to read my code
+became and issue as the prorgram grew, so I refactored and as far as I can tell, the
+functionality remains the same.
+
+There were some issues with where to register the signal handlers and where to send the
+SIGINT kill signals, but eventually figured it out via using copious amounts of 
+printf statements to debug
